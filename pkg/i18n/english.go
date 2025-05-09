@@ -984,6 +984,7 @@ type Actions struct {
 	ResolveConflictByDeletingFile     string
 	NotEnoughContextToStage           string
 	NotEnoughContextToDiscard         string
+	NotEnoughContextForCustomPatch    string
 	IgnoreExcludeFile                 string
 	IgnoreFileErr                     string
 	ExcludeFile                       string
@@ -2031,6 +2032,7 @@ func EnglishTranslationSet() *TranslationSet {
 			ResolveConflictByDeletingFile:   "Resolve by deleting file",
 			NotEnoughContextToStage:         "Staging or unstaging changes is not possible with a diff context size of 0. Increase the context using '%s'.",
 			NotEnoughContextToDiscard:       "Discarding changes is not possible with a diff context size of 0. Increase the context using '%s'.",
+			NotEnoughContextForCustomPatch:  "Creating custom patches is not possible with a diff context size of 0. Increase the context using '%s'.",
 			IgnoreExcludeFile:               "Ignore or exclude file",
 			IgnoreFileErr:                   "Cannot ignore .gitignore",
 			ExcludeFile:                     "Exclude file",
@@ -2167,6 +2169,7 @@ git:
   autoForwardBranches: none
 
 If, on the other hand, you want this even for feature branches, you can set it to 'allBranches' instead.`,
+			"0.51.0": `- The 'subprocess', 'stream', and 'showOutput' fields of custom commands have been replaced by a single 'output' field. This should be transparent, if you used these in your config file it should have been automatically updated for you. There's one notable change though: the 'stream' field used to mean both that the command's output would be streamed to the command log, and that the command would be run in a pseudo terminal (pty). We converted this to 'output: log', which means that the command's output will be streamed to the command log, but not use a pty, on the assumption that this is what most people wanted. If you do actually want to run a command in a pty, you can change this to 'output: logWithPty' instead.`,
 		},
 	}
 }

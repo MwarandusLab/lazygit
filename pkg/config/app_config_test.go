@@ -88,6 +88,92 @@ git:
 	}
 }
 
+func TestCustomCommandsOutputMigration(t *testing.T) {
+	scenarios := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Empty String",
+			input:    "",
+			expected: "",
+		}, {
+			name: "Convert subprocess to output=terminal",
+			input: `customCommands:
+  - command: echo 'hello'
+    subprocess: true
+  `,
+			expected: `customCommands:
+  - command: echo 'hello'
+    output: terminal
+`,
+		}, {
+			name: "Convert stream to output=log",
+			input: `customCommands:
+  - command: echo 'hello'
+    stream: true
+  `,
+			expected: `customCommands:
+  - command: echo 'hello'
+    output: log
+`,
+		}, {
+			name: "Convert showOutput to output=popup",
+			input: `customCommands:
+  - command: echo 'hello'
+    showOutput: true
+  `,
+			expected: `customCommands:
+  - command: echo 'hello'
+    output: popup
+`,
+		}, {
+			name: "Subprocess wins over the other two",
+			input: `customCommands:
+  - command: echo 'hello'
+    subprocess: true
+    stream: true
+    showOutput: true
+  `,
+			expected: `customCommands:
+  - command: echo 'hello'
+    output: terminal
+`,
+		}, {
+			name: "Stream wins over showOutput",
+			input: `customCommands:
+  - command: echo 'hello'
+    stream: true
+    showOutput: true
+  `,
+			expected: `customCommands:
+  - command: echo 'hello'
+    output: log
+`,
+		}, {
+			name: "Explicitly setting to false doesn't create an output=none key",
+			input: `customCommands:
+  - command: echo 'hello'
+    subprocess: false
+    stream: false
+    showOutput: false
+  `,
+			expected: `customCommands:
+  - command: echo 'hello'
+`,
+		},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			actual, err := computeMigratedConfig("path doesn't matter", []byte(s.input))
+			assert.NoError(t, err)
+			assert.Equal(t, s.expected, string(actual))
+		})
+	}
+}
+
 var largeConfiguration = []byte(`
 # Config relating to the Lazygit UI
 gui:
@@ -691,7 +777,93 @@ keybinding:
 `)
 
 func BenchmarkMigrationOnLargeConfiguration(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = computeMigratedConfig("path doesn't matter", largeConfiguration)
+	}
+}
+
+func TestAllBranchesLogCmdMigrations(t *testing.T) {
+	scenarios := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Incomplete Configuration Passes uneventfully",
+			input:    "git:",
+			expected: "git:",
+		}, {
+			name: "Single Cmd with no Cmds",
+			input: `git:
+  allBranchesLogCmd: git log --graph --oneline
+`,
+			expected: `git:
+  allBranchesLogCmds:
+    - git log --graph --oneline
+`,
+		}, {
+			name: "Cmd with one existing Cmds",
+			input: `git:
+  allBranchesLogCmd: git log --graph --oneline
+  allBranchesLogCmds:
+    - git log --graph --oneline --pretty
+`,
+			expected: `git:
+  allBranchesLogCmds:
+    - git log --graph --oneline
+    - git log --graph --oneline --pretty
+`,
+		}, {
+			name: "Only Cmds set have no changes",
+			input: `git:
+  allBranchesLogCmds:
+    - git log
+`,
+			expected: `git:
+  allBranchesLogCmds:
+    - git log
+`,
+		}, {
+			name: "Removes Empty Cmd When at end of yaml",
+			input: `git:
+  allBranchesLogCmds:
+    - git log --graph --oneline
+  allBranchesLogCmd:
+`,
+			expected: `git:
+  allBranchesLogCmds:
+    - git log --graph --oneline
+`,
+		}, {
+			name: "Migrates when sequence defined inline",
+			input: `git:
+  allBranchesLogCmds: [foo, bar]
+  allBranchesLogCmd: baz
+`,
+			expected: `git:
+  allBranchesLogCmds: [baz, foo, bar]
+`,
+		}, {
+			name: "Removes Empty Cmd With Keys Afterwards",
+			input: `git:
+  allBranchesLogCmds:
+    - git log --graph --oneline
+  allBranchesLogCmd:
+  foo: bar
+`,
+			expected: `git:
+  allBranchesLogCmds:
+    - git log --graph --oneline
+  foo: bar
+`,
+		},
+	}
+
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			actual, err := computeMigratedConfig("path doesn't matter", []byte(s.input))
+			assert.NoError(t, err)
+			assert.Equal(t, s.expected, string(actual))
+		})
 	}
 }
