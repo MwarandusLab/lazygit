@@ -330,6 +330,7 @@ type TranslationSet struct {
 	CommitDescriptionTitle                string
 	CommitDescriptionSubTitle             string
 	CommitDescriptionFooter               string
+	CommitDescriptionFooterTwoBindings    string
 	CommitHooksDisabledSubTitle           string
 	LocalBranchesTitle                    string
 	SearchTitle                           string
@@ -813,6 +814,8 @@ type TranslationSet struct {
 	MovePatchOutIntoIndexTooltip             string
 	MovePatchIntoNewCommit                   string
 	MovePatchIntoNewCommitTooltip            string
+	MovePatchIntoNewCommitBefore             string
+	MovePatchIntoNewCommitBeforeTooltip      string
 	MovePatchToSelectedCommit                string
 	MovePatchToSelectedCommitTooltip         string
 	CopyPatchToClipboard                     string
@@ -984,6 +987,7 @@ type Actions struct {
 	ResolveConflictByDeletingFile     string
 	NotEnoughContextToStage           string
 	NotEnoughContextToDiscard         string
+	NotEnoughContextForCustomPatch    string
 	IgnoreExcludeFile                 string
 	IgnoreFileErr                     string
 	ExcludeFile                       string
@@ -1407,7 +1411,8 @@ func EnglishTranslationSet() *TranslationSet {
 		CommitSummaryTitle:                   "Commit summary",
 		CommitDescriptionTitle:               "Commit description",
 		CommitDescriptionSubTitle:            "Press {{.togglePanelKeyBinding}} to toggle focus, {{.commitMenuKeybinding}} to open menu",
-		CommitDescriptionFooter:              "Press {{.confirmInEditorKeybinding}} to commit",
+		CommitDescriptionFooter:              "Press {{.confirmInEditorKeybinding}} to submit",
+		CommitDescriptionFooterTwoBindings:   "Press {{.confirmInEditorKeybinding1}} or {{.confirmInEditorKeybinding2}} to submit",
 		CommitHooksDisabledSubTitle:          "(hooks disabled)",
 		LocalBranchesTitle:                   "Local branches",
 		SearchTitle:                          "Search",
@@ -1895,8 +1900,10 @@ func EnglishTranslationSet() *TranslationSet {
 		RemovePatchFromOriginalCommitTooltip:     "Remove the current patch from its commit. This is achieved by starting an interactive rebase at the commit, applying the patch in reverse, and then continuing the rebase. If later commits depend on the patch, you may need to resolve conflicts.",
 		MovePatchOutIntoIndex:                    "Move patch out into index",
 		MovePatchOutIntoIndexTooltip:             "Move the patch out of its commit and into the index. This is achieved by starting an interactive rebase at the commit, applying the patch in reverse, continuing the rebase to completion, and then applying the patch to the index. If later commits depend on the patch, you may need to resolve conflicts.",
-		MovePatchIntoNewCommit:                   "Move patch into new commit",
+		MovePatchIntoNewCommit:                   "Move patch into new commit after the original commit",
 		MovePatchIntoNewCommitTooltip:            "Move the patch out of its commit and into a new commit sitting on top of the original commit. This is achieved by starting an interactive rebase at the original commit, applying the patch in reverse, then applying the patch to the index and committing it as a new commit, before continuing the rebase to completion. If later commits depend on the patch, you may need to resolve conflicts.",
+		MovePatchIntoNewCommitBefore:             "Move patch into new commit before the original commit",
+		MovePatchIntoNewCommitBeforeTooltip:      "Move the patch out of its commit and into a new commit before the original commit. This works best when the custom patch contains only entire hunks or even entire files; if it contains partial hunks, you are likely to get conflicts.",
 		MovePatchToSelectedCommit:                "Move patch to selected commit (%s)",
 		MovePatchToSelectedCommitTooltip:         "Move the patch out of its original commit and into the selected commit. This is achieved by starting an interactive rebase at the original commit, applying the patch in reverse, then continuing the rebase up to the selected commit, before applying the patch forward and amending the selected commit. The rebase is then continued to completion. If commits between the source and destination commit depend on the patch, you may need to resolve conflicts.",
 		CopyPatchToClipboard:                     "Copy patch to clipboard",
@@ -2031,6 +2038,7 @@ func EnglishTranslationSet() *TranslationSet {
 			ResolveConflictByDeletingFile:   "Resolve by deleting file",
 			NotEnoughContextToStage:         "Staging or unstaging changes is not possible with a diff context size of 0. Increase the context using '%s'.",
 			NotEnoughContextToDiscard:       "Discarding changes is not possible with a diff context size of 0. Increase the context using '%s'.",
+			NotEnoughContextForCustomPatch:  "Creating custom patches is not possible with a diff context size of 0. Increase the context using '%s'.",
 			IgnoreExcludeFile:               "Ignore or exclude file",
 			IgnoreFileErr:                   "Cannot ignore .gitignore",
 			ExcludeFile:                     "Exclude file",
@@ -2167,6 +2175,7 @@ git:
   autoForwardBranches: none
 
 If, on the other hand, you want this even for feature branches, you can set it to 'allBranches' instead.`,
+			"0.51.0": `- The 'subprocess', 'stream', and 'showOutput' fields of custom commands have been replaced by a single 'output' field. This should be transparent, if you used these in your config file it should have been automatically updated for you. There's one notable change though: the 'stream' field used to mean both that the command's output would be streamed to the command log, and that the command would be run in a pseudo terminal (pty). We converted this to 'output: log', which means that the command's output will be streamed to the command log, but not use a pty, on the assumption that this is what most people wanted. If you do actually want to run a command in a pty, you can change this to 'output: logWithPty' instead.`,
 		},
 	}
 }
