@@ -207,14 +207,6 @@ func (self *LocalCommitsController) GetKeybindings(opts types.KeybindingsOpts) [
 			Description:       self.c.Tr.MarkAsBaseCommit,
 			Tooltip:           self.c.Tr.MarkAsBaseCommitTooltip,
 		},
-		// overriding this navigation keybinding because we might need to load
-		// more commits on demand
-		{
-			Key:         opts.GetKey(opts.Config.Universal.GotoBottom),
-			Handler:     self.gotoBottom,
-			Description: self.c.Tr.GotoBottom,
-			Tag:         "navigation",
-		},
 	}
 
 	for _, binding := range outsideFilterModeBindings {
@@ -359,7 +351,7 @@ func (self *LocalCommitsController) fixup(selectedCommits []*models.Commit, star
 }
 
 func (self *LocalCommitsController) reword(commit *models.Commit) error {
-	commitMessage, err := self.c.Git().Commit.GetCommitMessage(commit.Hash)
+	commitMessage, err := self.c.Git().Commit.GetCommitMessage(commit.Hash())
 	if err != nil {
 		return err
 	}
@@ -556,7 +548,7 @@ func (self *LocalCommitsController) startInteractiveRebaseWithEdit(
 	return self.c.WithWaitingStatus(self.c.Tr.RebasingStatus, func(gocui.Task) error {
 		self.c.LogAction(self.c.Tr.Actions.EditCommit)
 		selectionRangeAndMode := self.getSelectionRangeAndMode()
-		err := self.c.Git().Rebase.EditRebase(commitsToEdit[len(commitsToEdit)-1].Hash)
+		err := self.c.Git().Rebase.EditRebase(commitsToEdit[len(commitsToEdit)-1].Hash())
 		return self.c.Helpers().MergeAndRebase.CheckMergeOrRebaseWithRefreshOptions(
 			err,
 			types.RefreshOptions{Mode: types.BLOCK_UI, Then: func() error {
@@ -564,7 +556,7 @@ func (self *LocalCommitsController) startInteractiveRebaseWithEdit(
 				for _, c := range commitsToEdit[:len(commitsToEdit)-1] {
 					// Merge commits can't be set to "edit", so just skip them
 					if !c.IsMerge() {
-						todos = append(todos, &models.Commit{Hash: c.Hash, Action: todo.Pick})
+						todos = append(todos, models.NewCommit(self.c.Model().HashPool, models.NewCommitOpts{Hash: c.Hash(), Action: todo.Pick}))
 					}
 				}
 				if len(todos) > 0 {
@@ -589,8 +581,8 @@ type SelectionRangeAndMode struct {
 func (self *LocalCommitsController) getSelectionRangeAndMode() SelectionRangeAndMode {
 	selectedIdx, rangeStartIdx, rangeSelectMode := self.context().GetSelectionRangeAndMode()
 	commits := self.c.Model().Commits
-	selectedHash := commits[selectedIdx].Hash
-	rangeStartHash := commits[rangeStartIdx].Hash
+	selectedHash := commits[selectedIdx].Hash()
+	rangeStartHash := commits[rangeStartIdx].Hash()
 	return SelectionRangeAndMode{selectedHash, rangeStartHash, rangeSelectMode}
 }
 
@@ -599,10 +591,10 @@ func (self *LocalCommitsController) restoreSelectionRangeAndMode(selectionRangeA
 	// new lines can be added for update-ref commands in the TODO file, due to
 	// stacked branches. So the selected commits may be in different positions in the list.
 	_, newSelectedIdx, ok1 := lo.FindIndexOf(self.c.Model().Commits, func(c *models.Commit) bool {
-		return c.Hash == selectionRangeAndMode.selectedHash
+		return c.Hash() == selectionRangeAndMode.selectedHash
 	})
 	_, newRangeStartIdx, ok2 := lo.FindIndexOf(self.c.Model().Commits, func(c *models.Commit) bool {
-		return c.Hash == selectionRangeAndMode.rangeStartHash
+		return c.Hash() == selectionRangeAndMode.rangeStartHash
 	})
 	if ok1 && ok2 {
 		self.context().SetSelectionRangeAndMode(newSelectedIdx, newRangeStartIdx, selectionRangeAndMode.mode)
@@ -868,7 +860,7 @@ func (self *LocalCommitsController) revert(commits []*models.Commit, start, end 
 	} else {
 		promptText = self.c.Tr.ConfirmRevertCommitRange
 	}
-	hashes := lo.Map(commits, func(c *models.Commit, _ int) string { return c.Hash })
+	hashes := lo.Map(commits, func(c *models.Commit, _ int) string { return c.Hash() })
 	isMerge := lo.SomeBy(commits, func(c *models.Commit) bool { return c.IsMerge() })
 
 	self.c.Confirm(types.ConfirmOpts{
@@ -911,7 +903,7 @@ func (self *LocalCommitsController) createFixupCommit(commit *models.Commit) err
 					return self.c.Helpers().WorkingTree.WithEnsureCommittableFiles(func() error {
 						self.c.LogAction(self.c.Tr.Actions.CreateFixupCommit)
 						return self.c.WithWaitingStatusSync(self.c.Tr.CreatingFixupCommitStatus, func() error {
-							if err := self.c.Git().Commit.CreateFixupCommit(commit.Hash); err != nil {
+							if err := self.c.Git().Commit.CreateFixupCommit(commit.Hash()); err != nil {
 								return err
 							}
 
@@ -978,7 +970,7 @@ func (self *LocalCommitsController) moveFixupCommitToOwnerStackedBranch(targetCo
 	headOfOwnerBranchIdx := -1
 	for i := self.context().GetSelectedLineIdx(); i > 0; i-- {
 		if lo.SomeBy(self.c.Model().Branches, func(b *models.Branch) bool {
-			return b.CommitHash == self.c.Model().Commits[i].Hash
+			return b.CommitHash == self.c.Model().Commits[i].Hash()
 		}) {
 			headOfOwnerBranchIdx = i
 			break
@@ -993,7 +985,7 @@ func (self *LocalCommitsController) moveFixupCommitToOwnerStackedBranch(targetCo
 }
 
 func (self *LocalCommitsController) createAmendCommit(commit *models.Commit, includeFileChanges bool) error {
-	commitMessage, err := self.c.Git().Commit.GetCommitMessage(commit.Hash)
+	commitMessage, err := self.c.Git().Commit.GetCommitMessage(commit.Hash())
 	if err != nil {
 		return err
 	}
@@ -1139,7 +1131,7 @@ func isFixupCommit(subject string) (string, bool) {
 }
 
 func (self *LocalCommitsController) createTag(commit *models.Commit) error {
-	return self.c.Helpers().Tags.OpenCreateTagPrompt(commit.Hash, func() {})
+	return self.c.Helpers().Tags.OpenCreateTagPrompt(commit.Hash(), func() {})
 }
 
 func (self *LocalCommitsController) openSearch() error {
@@ -1152,20 +1144,6 @@ func (self *LocalCommitsController) openSearch() error {
 	}
 
 	return self.c.Helpers().Search.OpenSearchPrompt(self.context())
-}
-
-func (self *LocalCommitsController) gotoBottom() error {
-	// we usually lazyload these commits but now that we're jumping to the bottom we need to load them now
-	if self.context().GetLimitCommits() {
-		self.context().SetLimitCommits(false)
-		if err := self.c.Refresh(types.RefreshOptions{Mode: types.SYNC, Scope: []types.RefreshableView{types.COMMITS}}); err != nil {
-			return err
-		}
-	}
-
-	self.context().SetSelectedLineIdx(self.context().Len() - 1)
-
-	return nil
 }
 
 func (self *LocalCommitsController) handleOpenLogMenu() error {
@@ -1304,11 +1282,11 @@ func (self *LocalCommitsController) canPaste() *types.DisabledReason {
 }
 
 func (self *LocalCommitsController) markAsBaseCommit(commit *models.Commit) error {
-	if commit.Hash == self.c.Modes().MarkedBaseCommit.GetHash() {
+	if commit.Hash() == self.c.Modes().MarkedBaseCommit.GetHash() {
 		// Reset when invoking it again on the marked commit
 		self.c.Modes().MarkedBaseCommit.SetHash("")
 	} else {
-		self.c.Modes().MarkedBaseCommit.SetHash(commit.Hash)
+		self.c.Modes().MarkedBaseCommit.SetHash(commit.Hash())
 	}
 	self.c.PostRefreshUpdate(self.c.Contexts().LocalCommits)
 	return nil

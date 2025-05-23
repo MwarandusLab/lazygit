@@ -180,6 +180,8 @@ type IListContext interface {
 	IsListContext() // used for type switch
 	RangeSelectEnabled() bool
 	RenderOnlyVisibleLines() bool
+
+	IndexForGotoBottom() int
 }
 
 type IPatchExplorerContext interface {
@@ -298,6 +300,7 @@ type IContextMgr interface {
 	CurrentStatic() Context
 	CurrentSide() Context
 	CurrentPopup() []Context
+	NextInStack(context Context) Context
 	IsCurrent(c Context) bool
 	IsCurrentOrParent(c Context) bool
 	ForEach(func(Context))

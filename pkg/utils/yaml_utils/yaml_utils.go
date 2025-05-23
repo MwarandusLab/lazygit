@@ -4,96 +4,28 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
 
-// takes a yaml document in bytes, a path to a key, and a value to set. The value must be a scalar.
-func UpdateYamlValue(yamlBytes []byte, path []string, value string) ([]byte, error) {
-	// Parse the YAML file.
-	var node yaml.Node
-	err := yaml.Unmarshal(yamlBytes, &node)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
-	}
-
-	// Empty document: need to create the top-level map ourselves
-	if len(node.Content) == 0 {
-		node.Content = append(node.Content, &yaml.Node{
-			Kind: yaml.MappingNode,
-		})
-	}
-
-	body := node.Content[0]
-
-	if body.Kind != yaml.MappingNode {
-		return yamlBytes, errors.New("yaml document is not a dictionary")
-	}
-
-	if didChange, err := updateYamlNode(body, path, value); err != nil || !didChange {
-		return yamlBytes, err
-	}
-
-	// Convert the updated YAML node back to YAML bytes.
-	updatedYAMLBytes, err := YamlMarshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert YAML node to bytes: %w", err)
-	}
-
-	return updatedYAMLBytes, nil
-}
-
-// Recursive function to update the YAML node.
-func updateYamlNode(node *yaml.Node, path []string, value string) (bool, error) {
-	if len(path) == 0 {
-		if node.Kind != yaml.ScalarNode {
-			return false, errors.New("yaml node is not a scalar")
-		}
-		if node.Value != value {
-			node.Value = value
-			return true, nil
-		}
-		return false, nil
-	}
-
-	if node.Kind != yaml.MappingNode {
-		return false, errors.New("yaml node in path is not a dictionary")
-	}
-
-	key := path[0]
-	if _, valueNode := lookupKey(node, key); valueNode != nil {
-		return updateYamlNode(valueNode, path[1:], value)
-	}
-
-	// if the key doesn't exist, we'll add it
-
-	// at end of path: add the new key, done
-	if len(path) == 1 {
-		node.Content = append(node.Content, &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Value: key,
-		}, &yaml.Node{
-			Kind:  yaml.ScalarNode,
-			Value: value,
-		})
-		return true, nil
-	}
-
-	// otherwise, create the missing intermediate node and continue
-	newNode := &yaml.Node{
-		Kind: yaml.MappingNode,
-	}
-	node.Content = append(node.Content, &yaml.Node{
-		Kind:  yaml.ScalarNode,
-		Value: key,
-	}, newNode)
-	return updateYamlNode(newNode, path[1:], value)
-}
-
-func lookupKey(node *yaml.Node, key string) (*yaml.Node, *yaml.Node) {
+func LookupKey(node *yaml.Node, key string) (*yaml.Node, *yaml.Node) {
 	for i := 0; i < len(node.Content)-1; i += 2 {
 		if node.Content[i].Value == key {
 			return node.Content[i], node.Content[i+1]
+		}
+	}
+
+	return nil, nil
+}
+
+// Returns the key and value if they were present
+func RemoveKey(node *yaml.Node, key string) (*yaml.Node, *yaml.Node) {
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		if node.Content[i].Value == key {
+			key, value := node.Content[i], node.Content[i+1]
+			node.Content = slices.Delete(node.Content, i, i+2)
+			return key, value
 		}
 	}
 
@@ -123,7 +55,7 @@ func transformNode(node *yaml.Node, path []string, transform func(node *yaml.Nod
 		return transform(node)
 	}
 
-	keyNode, valueNode := lookupKey(node, path[0])
+	keyNode, valueNode := LookupKey(node, path[0])
 	if keyNode == nil {
 		return nil
 	}
@@ -133,41 +65,37 @@ func transformNode(node *yaml.Node, path []string, transform func(node *yaml.Nod
 
 // Takes the root node of a yaml document, a path to a key, and a new name for the key.
 // Will rename the key to the new name if it exists, and do nothing otherwise.
-func RenameYamlKey(rootNode *yaml.Node, path []string, newKey string) error {
+func RenameYamlKey(rootNode *yaml.Node, path []string, newKey string) (error, bool) {
 	// Empty document: nothing to do.
 	if len(rootNode.Content) == 0 {
-		return nil
+		return nil, false
 	}
 
 	body := rootNode.Content[0]
 
-	if err := renameYamlKey(body, path, newKey); err != nil {
-		return err
-	}
-
-	return nil
+	return renameYamlKey(body, path, newKey)
 }
 
 // Recursive function to rename the YAML key.
-func renameYamlKey(node *yaml.Node, path []string, newKey string) error {
+func renameYamlKey(node *yaml.Node, path []string, newKey string) (error, bool) {
 	if node.Kind != yaml.MappingNode {
-		return errors.New("yaml node in path is not a dictionary")
+		return errors.New("yaml node in path is not a dictionary"), false
 	}
 
-	keyNode, valueNode := lookupKey(node, path[0])
+	keyNode, valueNode := LookupKey(node, path[0])
 	if keyNode == nil {
-		return nil
+		return nil, false
 	}
 
 	// end of path reached: rename key
 	if len(path) == 1 {
 		// Check that new key doesn't exist yet
-		if newKeyNode, _ := lookupKey(node, newKey); newKeyNode != nil {
-			return fmt.Errorf("new key `%s' already exists", newKey)
+		if newKeyNode, _ := LookupKey(node, newKey); newKeyNode != nil {
+			return fmt.Errorf("new key `%s' already exists", newKey), false
 		}
 
 		keyNode.Value = newKey
-		return nil
+		return nil, true
 	}
 
 	return renameYamlKey(valueNode, path[1:], newKey)
